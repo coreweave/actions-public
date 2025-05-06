@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release:
     name: Release
@@ -28,7 +32,12 @@ jobs:
         with:
           node-version: "lts/*"
 
+      - name: Global Install
+        run: npm install -g semantic-release
+
       - name: Release
+        working-directory: .github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx semantic-release
+        run: |
+          semantic-release --no-ci
