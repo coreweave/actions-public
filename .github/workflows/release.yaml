@@ -36,8 +36,8 @@ jobs:
         run: npm install -g semantic-release
 
       - name: Release
+        working-directory: .github
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp .github/.releaserc.json ./
           semantic-release --no-ci
