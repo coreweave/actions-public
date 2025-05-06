@@ -1,0 +1,10 @@
+.history
+.vscode
+.idea
+.DS_Store
+node_modules
+package-lock.json
+dist
+env
+venv
+__pycache__

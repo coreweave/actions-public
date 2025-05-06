@@ -1,0 +1,49 @@
+---
+name: Get Cloudsmith API Token
+description: Get Cloudsmith API Token from OIDC token
+author: CoreWeave
+branding:
+  icon: lock
+  color: blue
+
+inputs:
+  oidc-token:
+    description: 'OIDC token (should be masked)'
+    required: true
+  cloudsmith-service-slug:
+    description: 'Cloudsmith service slug (service account name)'
+    required: true
+  cloudsmith-org:
+    description: 'Cloudsmith organization name'
+    default: ''
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get Cloudsmith API Token
+      shell: bash
+      env:
+        OIDC_TOKEN: ${{ inputs.oidc-token }}
+        SERVICE_SLUG: ${{ inputs.cloudsmith-service-slug }}
+        CLOUDSMITH_ORG: ${{ inputs.cloudsmith-org }}
+      run: |
+        cloudsmith_token=$(curl -X POST -H "Content-Type: application/json" -d "{\"oidc_token\":\"$OIDC_TOKEN\", \"service_slug\":\"$SERVICE_SLUG\"}" https://api.cloudsmith.io/openid/"$CLOUDSMITH_ORG"/ | jq -r '.token')
+
+        # ensure token is not empty
+        if [[ "$cloudsmith_token" == "null" ]]; then
+          echo "::error::Failed to get Cloudsmith API token! Invalid OIDC token/claims, service slug, or organization name!"
+          exit 1
+        else
+          echo "::add-mask::$cloudsmith_token"
+          echo "Successfully obtained Cloudsmith API token and masked it"
+
+          # ensure token is valid
+          echo "::debug::Validating Cloudsmith API token"
+          curl --request GET --url https://api.cloudsmith.io/v1/user/self/ --header "X-Api-Key:Bearer $cloudsmith_token" --header 'accept: application/json'
+          echo
+
+          # set env variable
+          echo "::debug::Setting Cloudsmith API token as environment variable 'CLOUDSMITH_API_TOKEN'"
+          echo "CLOUDSMITH_API_TOKEN=$cloudsmith_token" >> "$GITHUB_ENV"
+        fi

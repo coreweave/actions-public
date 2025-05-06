@@ -1,0 +1,257 @@
+---
+name: Buildx Build Image (BuildKit)
+description: Buildx Build Image (BuildKit)
+author: CoreWeave
+branding:
+  icon: box
+  color: blue
+
+inputs:
+  context:
+    required: true
+    description: A directory containing a Dockerfile which buildx will use to build your image
+  tags:
+    required: true
+    description: A comma-separated list of Docker tag(s)
+  dockerfile:
+    required: true
+    description: Filepath resolving to the Dockerfile to use
+
+  # BuildKit Inputs
+  endpoint:
+    required: true
+    description: The endpoint of the BuildKit builder (e.g. tcp://buildkitd-amd64.git-devprod:1234)
+  append:
+    required: false
+    default: ""
+    description: Additional endpoints to append to the builder, YAML string (these will share the same mTLS certs as the primary endpoint)
+  buildx-args:
+    required: false
+    default: ""
+    description: Extra arguments to pass to the 'buildx build' command
+
+  # NOTE: docker-config is required if registry, username and password are not provided.
+  #       If both are provided, docker-config will be used.
+  docker-config:
+    required: false
+    default: ""
+    description: A Docker configuration file which BuildKit will use to authenticate to a container registry to push your image
+
+  # NOTE: registry, username and password are optional if docker-config is provided.
+  registry:
+    required: false
+    default: ""
+    description: The URL to the container registry
+  username:
+    required: false
+    default: ""
+    description: The username to authenticate to the container registry
+  password:
+    required: false
+    default: ""
+    description: The password to authenticate to the container registry
+
+  # Doppler Secrets
+  doppler-token:
+    required: true
+    description: The Doppler token to fetch the BuildKit client certs (e.g. secrets.DOPPLER_BUILDKIT_CLIENT_READ_TOKEN)
+  doppler-config:
+    required: true
+    description: The Doppler config to fetch the BuildKit client certs (e.g. prod)
+  doppler-project:
+    required: true
+    description: The Doppler project to fetch the BuildKit client certs (e.g. devprod-buildkit-consumer)
+
+runs:
+  using: composite
+  steps:
+    - name: Validate GitHub Workspace
+      shell: bash
+      env:
+        TAGS: ${{ inputs.tags }}
+        CONTEXT: ${{ inputs.context }}
+        DOCKER_CONFIG: ${{ inputs.docker-config }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+        DOPPLER_TOKEN: ${{ inputs.doppler-token }}
+        DOPPLER_CONFIG: ${{ inputs.doppler-config }}
+        DOPPLER_PROJECT: ${{ inputs.doppler-project }}
+        APPEND_ENDPOINTS: ${{ inputs.append }}
+      run: |
+        # mask username
+        if [[ ! -z "$REGISTRY_USERNAME" ]]; then
+          echo "::add-mask::$REGISTRY_USERNAME"
+        fi
+
+        # mask password
+        if [[ ! -z "$REGISTRY_PASSWORD" ]]; then
+          echo "::add-mask::$REGISTRY_PASSWORD"
+        fi
+
+        # check that tags are provided
+        if [[ -z "$TAGS" ]]; then
+          echo "::error::'tags' input is required."
+          exit 1
+        fi
+
+        # check that doppler inputs are provided
+        if [[ -z "$DOPPLER_TOKEN" || -z "$DOPPLER_CONFIG" || -z "$DOPPLER_PROJECT" ]]; then
+          echo "::error::Doppler token, config and project are required."
+          exit 1
+        fi
+
+        # check either docker-config or registry credentials provided
+        if [[ ! -f "$DOCKER_CONFIG" ]]; then
+
+          # check if registry, username and password are provided
+          if [[ -z "$REGISTRY" || -z "$REGISTRY_USERNAME" || -z "$REGISTRY_PASSWORD" ]]; then
+            echo "::error::Registry, username and password are required when Docker configuration is not provided."
+            exit 1
+          else
+            echo "::debug::Using registry, username and password for authentication"
+            echo "USE_CREDENTIALS=true" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "USE_CREDENTIALS=false" >> "$GITHUB_ENV"
+        fi
+
+        if [[ -n "$DOCKER_CONFIG" && ( -n "$REGISTRY" || -n "$REGISTRY_USERNAME" || -n "$REGISTRY_PASSWORD" ) ]]; then
+          echo "::warning::Both 'docker-config' and 'registry', 'username', 'password' are provided. 'docker-config' will be used."
+        fi
+
+        # check that Dockerfile exists
+        if [[ ! -f "$DOCKERFILE" ]]; then
+          echo "::error::Dockerfile not found: $DOCKERFILE"
+          exit 1
+        fi
+
+    - name: Create Temp BuildKit Workspace
+      shell: bash
+      run: |
+        mkdir -p "$GITHUB_ACTION_PATH/_tmp/buildkit/.docker"
+
+    - name: Copy / Create registry config.json
+      shell: bash
+      env:
+        DOCKER_CONFIG: ${{ inputs.docker-config }}
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+      run: |
+        if [[ "$USE_CREDENTIALS" == "true" ]]; then
+          echo "::debug::Using registry, username and password for authentication"
+          cat > "$GITHUB_ACTION_PATH/_tmp/buildkit/.docker/config.json" <<EOF
+          {
+            "auths": {
+              "https://$REGISTRY": {
+                "username": "$REGISTRY_USERNAME",
+                "password": "$REGISTRY_PASSWORD"
+              }
+            }
+          }
+        EOF
+        else
+          echo "::debug::Using provided Docker configuration file"
+          cp "$DOCKER_CONFIG" "$GITHUB_ACTION_PATH/_tmp/buildkit/.docker/config.json"
+        fi
+
+    # BuildKit Step 1 -- Fetch Client Certs
+    # NOTE: DO NOT USE THE OUTPUTS FROM THIS STEP AS INPUTS TO OTHER JOBS!
+    #       THEY SHOULD BE USED ONLY IN THE SAME JOB!
+    - name: Fetch BuildKit Client Certs
+      uses: dopplerhq/secrets-fetch-action@v1.2.0
+      id: client-certs
+      with:
+        doppler-token: ${{ inputs.doppler-token }}
+        doppler-project: ${{ inputs.doppler-project }}
+        doppler-config: ${{ inputs.doppler-config }}
+        inject-env-vars: false
+
+    - name: Configure Additional Endpoint Certs
+      if: ${{ inputs.append != '' }}
+      shell: bash
+      env:
+        TLS_CACERT: ${{ steps.client-certs.outputs.TLS_CACERT }}
+        TLS_CERT: ${{ steps.client-certs.outputs.TLS_CERT }}
+        TLS_KEY: ${{ steps.client-certs.outputs.TLS_KEY }}
+        APPEND_ENDPOINTS: ${{ inputs.append }}
+      run: |
+        # loop through each additional endpoint and export variables for mTLS client certs starting at 1
+        for i in $(seq 1 $(echo "$APPEND_ENDPOINTS" | yq eval 'length' -)); do
+          echo "::debug::Exporting env var mTLS client certs for builder node $i"
+          {
+            echo "BUILDER_NODE_${i}_AUTH_TLS_CACERT<<EOF"
+            echo "$TLS_CACERT"
+            echo EOF
+          } >> "$GITHUB_ENV"
+          {
+            echo "BUILDER_NODE_${i}_AUTH_TLS_CERT<<EOF"
+            echo "$TLS_CERT"
+            echo EOF
+          } >> "$GITHUB_ENV"
+          {
+            echo "BUILDER_NODE_${i}_AUTH_TLS_KEY<<EOF"
+            echo "$TLS_KEY"
+            echo EOF
+          } >> "$GITHUB_ENV"
+        done
+
+    # BuildKit Step 2 -- Setup BuildKit Builder
+    - name: Setup BuildKit Builder
+      uses: docker/setup-buildx-action@v3
+      with:
+        driver: remote
+        endpoint: ${{ inputs.endpoint }}
+        append: ${{ inputs.append }}
+      env:
+        BUILDER_NODE_0_AUTH_TLS_CACERT: ${{ steps.client-certs.outputs.TLS_CACERT }}
+        BUILDER_NODE_0_AUTH_TLS_CERT: ${{ steps.client-certs.outputs.TLS_CERT }}
+        BUILDER_NODE_0_AUTH_TLS_KEY: ${{ steps.client-certs.outputs.TLS_KEY }}
+
+    # BuildKit Step 3 -- Build & Push Image
+    - name: Build & Push Image (BuildKit)
+      shell: bash
+      env:
+        ADDITIONAL_BUILDX_ARGS: ${{ inputs.buildx-args }}
+        BUILD_CONTEXT: ${{ inputs.context }}
+        DOCKERFILE_PATH: ${{ inputs.dockerfile }}
+        TAGS: ${{ inputs.tags }}
+      run: |
+        # construct tags
+        echo "::debug::Constructing tags..."
+        tags=$(echo $TAGS | tr '\n' ' ' | tr ',' ' ' | awk '{$1=$1; for(i=1;i<=NF;i++) printf "-t %s ", $i}')
+        echo "::debug::Tags: '$tags'"
+
+        # normalize additional buildx args
+        ADDITIONAL_BUILDX_ARGS=$(echo $ADDITIONAL_BUILDX_ARGS | tr '\n' ' ')
+
+        # copy registry auth location
+        mkdir -p ~/.docker
+        cp "$GITHUB_ACTION_PATH/_tmp/buildkit/.docker/config.json" ~/.docker/config.json
+
+        # construct buildx build
+        echo "::debug::Constructing buildx command..."
+        buildx_cmd="buildx build $ADDITIONAL_BUILDX_ARGS $tags --file $DOCKERFILE_PATH --push $BUILD_CONTEXT"
+        echo "::debug::Buildx command: '$buildx_cmd'"
+
+        # run buildx_cmd
+        echo "::debug::Running buildx command: $buildx_cmd"
+        $buildx_cmd
+
+    - name: Remove BuildKit Workspace
+      shell: bash
+      if: always()
+      run: |
+        # remove temporary BuildKit workspace
+        if [[ -d "$GITHUB_ACTION_PATH/_tmp/buildkit" ]]; then
+          echo "::debug::Removing temp BuildKit workspace..."
+          rm -rf "$GITHUB_ACTION_PATH/_tmp/buildkit"
+        fi
+
+        # remove home registry auth location
+        if [[ -f ~/.docker/config.json ]]; then
+          echo "::debug::Removing home registry auth location..."
+          rm -f ~/.docker/config.json
+        fi
