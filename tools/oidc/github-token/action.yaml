@@ -1,0 +1,22 @@
+---
+name: Get OIDC GitHub Token
+author: CoreWeave
+description: Get ID token from Github OIDC provider
+branding:
+  icon: lock
+  color: black
+
+inputs:
+  audience:
+    description: Audience for which the ID token is intended for
+    required: false
+
+outputs:
+  id_token_default:
+    description: ID token obtained from GitHub OIDC provider (default audience)
+  id_token_audience:
+    description: ID token obtained from GitHub OIDC provider (custom audience)
+
+runs:
+  using: node20
+  main: compiled/index.js

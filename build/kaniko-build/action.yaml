@@ -1,0 +1,144 @@
+---
+name: Kaniko Build Image
+description: Kaniko Build Image
+author: CoreWeave
+branding:
+  icon: box
+  color: orange
+
+inputs:
+  context:
+    required: true
+    description: A directory containing a Dockerfile which kaniko will use to build your image
+  tags:
+    required: true
+    description: A comma-separated list of Docker tag(s)
+  dockerfile:
+    required: true
+    description: Filepath resolving to the Dockerfile to use
+  kaniko-args:
+    required: false
+    default: ""
+    description: Extra arguments to pass to the Kaniko executor
+
+  # NOTE: docker-config is required if registry, username and password are not provided.
+  #       If both are provided, docker-config will be used.
+  docker-config:
+    required: false
+    default: ""
+    description: A Docker configuration file which kaniko will use to authenticate to a container registry to push your image
+
+  # NOTE: registry, username and password are optional if docker-config is provided.
+  registry:
+    required: false
+    default: ""
+    description: The URL to the container registry
+  username:
+    required: false
+    default: ""
+    description: The username to authenticate to the container registry
+  password:
+    required: false
+    default: ""
+    description: The password to authenticate to the container registry
+
+runs:
+  using: composite
+  steps:
+    - name: Validate GitHub Workspace
+      shell: bash
+      env:
+        TAGS: ${{ inputs.tags }}
+        CONTEXT: ${{ inputs.context }}
+        DOCKER_CONFIG: ${{ inputs.docker-config }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+      run: |
+        # mask username
+        if [[ ! -z "$REGISTRY_USERNAME" ]]; then
+          echo "::add-mask::$REGISTRY_USERNAME"
+        fi
+
+        # mask password
+        if [[ ! -z "$REGISTRY_PASSWORD" ]]; then
+          echo "::add-mask::$REGISTRY_PASSWORD"
+        fi
+
+        # check that tags are provided
+        if [[ -z "$TAGS" ]]; then
+          echo "::error::'tags' input is required."
+          exit 1
+        fi
+
+        # check either docker-config or registry credentials provided
+        if [[ ! -f "$DOCKER_CONFIG" ]]; then
+
+          # check if registry, username and password are provided
+          if [[ -z "$REGISTRY" || -z "$REGISTRY_USERNAME" || -z "$REGISTRY_PASSWORD" ]]; then
+            echo "::error::Registry, username and password are required when Docker configuration is not provided."
+            exit 1
+          else
+            echo "::debug::Using registry, username and password for authentication"
+            echo "USE_CREDENTIALS=true" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "USE_CREDENTIALS=false" >> "$GITHUB_ENV"
+        fi
+
+        if [[ -n "$DOCKER_CONFIG" && ( -n "$REGISTRY" || -n "$REGISTRY_USERNAME" || -n "$REGISTRY_PASSWORD" ) ]]; then
+          echo "::warning::Both 'docker-config' and 'registry', 'username', 'password' are provided. 'docker-config' will be used."
+        fi
+
+        # check that Dockerfile exists
+        if [[ ! -f "$DOCKERFILE" ]]; then
+          echo "::error::Dockerfile not found: $DOCKERFILE"
+          exit 1
+        fi
+
+    - name: Create Temp Kaniko Workspace
+      shell: bash
+      run: |
+        mkdir -p _tmp/kaniko/.docker
+
+    - name: Copy / Create docker config.json
+      shell: bash
+      env:
+        DOCKER_CONFIG: ${{ inputs.docker-config }}
+        REGISTRY: ${{ inputs.registry }}
+        REGISTRY_USERNAME: ${{ inputs.username }}
+        REGISTRY_PASSWORD: ${{ inputs.password }}
+      run: |
+        if [[ "$USE_CREDENTIALS" == "true" ]]; then
+          echo "::debug::Using registry, username and password for authentication"
+          echo "{\"auths\":{\"https://$REGISTRY\":{\"username\":\"$REGISTRY_USERNAME\",\"password\":\"$REGISTRY_PASSWORD\"}}}" > _tmp/kaniko/.docker/config.json
+        else
+          echo "::debug::Using provided Docker configuration file"
+          cp "$DOCKER_CONFIG" _tmp/kaniko/.docker/config.json
+        fi
+
+    - name: Copy Kaniko Entrypoint
+      shell: bash
+      run: cp "$GITHUB_ACTION_PATH"/kaniko-entrypoint.sh _tmp/kaniko/kaniko-entrypoint.sh
+
+    - name: Run Kaniko to build and push image
+      uses: docker://gcr.io/kaniko-project/executor:v1.23.2-debug
+      env:
+        CONTEXT: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        TAGS: ${{ inputs.tags }}
+        EXTRA_KANIKO_ARGS: ${{ inputs.kaniko-args }}
+      with:
+        entrypoint: _tmp/kaniko/kaniko-entrypoint.sh
+
+    - name: Cleanup Temp Kaniko Workspace
+      if: always()
+      shell: bash
+      run: |
+        if [[ -d _tmp/kaniko ]]; then
+          echo "::debug::Cleaning up temporary kaniko workspace"
+          rm -rf _tmp/kaniko
+        else
+          echo "::debug::Temporary kaniko workspace not found, nothing left to do..."
+        fi
