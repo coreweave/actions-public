@@ -1,5 +1,9 @@
 # CoreWeave Public Actions
 
+## Authentication
+
+- [`caios-login`][caios-login]
+
 ## Build
  - [`buildx-build`][buildx-build]
  - [`kaniko-build`][kaniko-build]
@@ -10,6 +14,7 @@
  - [`github-token`][github-token]
  - [`cloudsmith-token`][cloudsmith-token]
 
+[caios-login]: ./auth/caios-login/README.md
 [buildx-build]: ./build/buildx-build/README.md
 [kaniko-build]: ./build/kaniko-build/README.md
 [github-token]: ./tools/oidc/github-token/README.md

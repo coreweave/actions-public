@@ -1,0 +1,32 @@
+name: Log into CAIOS
+description: Authenticate to CAIOS using Github Actions OIDC
+inputs:
+  region:
+    description: "The CoreWeave Region to use, e.g. US-EAST-04A"
+    required: true
+  org-id:
+    description: "The CoreWeave Org ID to use, e.g. cw123456"
+    required: true
+  profile:
+    description: "The AWS CLI profile name to configure. If not set or 'default', uses default profile"
+    required: false
+    default: ""
+
+  # These have defaults
+  audience:
+    description: "The Audience claim to use"
+    required: false
+    default: "https://coreweave.com/iam"
+  oidc-endpoint:
+    description: "The OIDC Credentials Endpoint to use"
+    required: false
+    default: "https://api.coreweave.com/v1/cwobject/temporary-credentials/oidc"
+  s3-endpoint:
+    description: "The S3 Endpoint to use. Use http://cwlota.com if using Github runners on CKS"
+    required: false
+    default: "https://cwobject.com"
+
+runs:
+  using: "node24"
+  main: "dist/index.js"
+  post: "dist/cleanup.js"

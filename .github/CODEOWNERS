@@ -1,1 +1,4 @@
 * @coreweave/developer-productivity
+
+auth/             @coreweave/cloud-platform-api-iam
+auth/caios-login  @coreweave/storage-engineer
