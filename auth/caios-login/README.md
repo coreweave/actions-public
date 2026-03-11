@@ -38,7 +38,7 @@ In order to use `caios-login`, you must first:
 1. In the [Cloud Console](https://console.coreweave.com/), under **IAM** Enable **Workload Federation (OIDC)** to Github Actions.
   - Unless you are using Github Enterprise Server (GHE), your `Issuer` will be `https://token.actions.githubusercontent.com`. You can use a custom audience, or use the default `https://coreweave.com/iam`.
   
-2. In the [Cloud Console](https://console.coreweave.com/), under **Object Storage > Organization Policies** you need at least one policy to grant access to `cwobject:CreateAccessKey`. The following policy is an example grants access to the `prod` [Environment](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) of the Github repo `octo-org/octo-repo`:
+2. In the [Cloud Console](https://console.coreweave.com/), under **Object Storage > Organization Policies** you need at least one policy to grant access to `cwobject:CreateAccessKeyFromOIDC`. The following policy is an example grants access to the `prod` [Environment](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments) of the Github repo `octo-org/octo-repo`:
 
 ```json
 {
@@ -51,7 +51,7 @@ In order to use `caios-login`, you must first:
       "actions": [
         "s3:ListBucket",
         "s3:ListAllMyBuckets",
-        "cwobject:CreateAccessKey*",
+        "cwobject:CreateAccessKeyFromOIDC",
         "cwobject:ListAccessPolicy",
         "s3:CreateBucket"
       ],
