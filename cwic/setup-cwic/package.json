@@ -1,0 +1,30 @@
+{
+  "name": "setup-cwic-action",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Install CWIC for GitHub Actions",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test tests/setup-cwic.test.js",
+    "integration": "node --test tests/integration.test.js",
+    "package": "rollup --config",
+    "format:write": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/http-client": "^4.0.1",
+    "@actions/tool-cache": "^4.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "prettier": "^3.9.9",
+    "rollup": "^4.53.2"
+  }
+}

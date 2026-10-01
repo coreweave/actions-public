@@ -1,0 +1,20 @@
+name: Set up CWIC
+description: Install CWIC and add it to PATH
+author: CoreWeave
+branding:
+  icon: terminal
+  color: blue
+
+inputs:
+  version:
+    description: Exact CWIC release tag or latest
+    required: false
+    default: latest
+
+outputs:
+  version:
+    description: Resolved CWIC release tag
+
+runs:
+  using: node24
+  main: compiled/index.cjs

@@ -1,0 +1,81 @@
+---
+name: Set up CWIC
+on:
+  pull_request:
+    paths:
+      - cwic/setup-cwic/**
+      - .github/workflows/setup-cwic.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - cwic/setup-cwic/**
+      - .github/workflows/setup-cwic.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: cwic/setup-cwic
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: cwic/setup-cwic/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run package
+      - name: Check committed bundle
+        run: git diff --exit-code -- compiled/index.cjs
+
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Test bundled action and credential preservation
+        run: npm run integration
+      - name: Install default version
+        id: latest
+        uses: ./cwic/setup-cwic
+      - name: Verify default installation in a subsequent step
+        env:
+          CWIC_RELEASE: ${{ steps.latest.outputs.version }}
+        run: |
+          test -n "$CWIC_RELEASE"
+          cwic version | grep -F "version ${CWIC_RELEASE#v} "
+      - name: Install exact version
+        id: pinned
+        uses: ./cwic/setup-cwic
+        with:
+          version: v1.46.0
+      - name: Verify pinned installation in a subsequent step
+        env:
+          CWIC_RELEASE: ${{ steps.pinned.outputs.version }}
+        run: |
+          test "$CWIC_RELEASE" = v1.46.0
+          cwic version | grep -F 'version 1.46.0 '
+      - name: Reject unavailable version
+        id: unavailable
+        continue-on-error: true
+        uses: ./cwic/setup-cwic
+        with:
+          version: v0.0.0-setup-cwic-unavailable
+      - name: Verify unavailable version failed
+        run: test '${{ steps.unavailable.outcome }}' = failure
