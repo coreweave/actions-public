@@ -1,0 +1,52 @@
+name: Log into CWCR
+description: Authenticate to CoreWeave Container Registry (CWCR) using GitHub Actions OIDC
+inputs:
+  registry:
+    description: "The CWCR registry host, e.g. acme.cwcr.io"
+    required: true
+  audience:
+    description: "The Audience claim to request in the GitHub OIDC token. Must match the audience registered for GitHub's issuer in CoreWeave Workload Federation, e.g. cwcr-acme"
+    required: true
+  cwic-version:
+    description: "The cwic release tag to install, or 'latest'. See https://github.com/coreweave/cwic/releases"
+    required: false
+    default: "latest"
+
+runs:
+  using: composite
+  steps:
+    - name: Check OIDC token access
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ] || [ -z "${ACTIONS_ID_TOKEN_REQUEST_TOKEN:-}" ]; then
+          echo "::error::This job cannot request an OIDC token. Add 'permissions: id-token: write' at the job or workflow level." >&2
+          exit 1
+        fi
+
+    - name: Install cwic
+      uses: coreweave/actions-public/cwic/setup-cwic@v1.2.0
+      with:
+        version: ${{ inputs.cwic-version }}
+
+    - name: Configure Docker credential helper
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.registry }}
+        AUDIENCE: ${{ inputs.audience }}
+      run: |
+        set -euo pipefail
+        bin="${RUNNER_TEMP}/cwcr-login/bin"
+        mkdir -p "${bin}"
+        export PATH="${bin}:${PATH}"
+
+        cwic registry credential-helper install --bin-dir "${bin}"
+        cwic registry credential-helper configure "${REGISTRY}" --oidc -- \
+          bash -euo pipefail -c '
+            curl -fsS -G --data-urlencode "audience=$1" \
+              -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}" \
+              | jq -er ".value | select(type == \"string\" and length > 0)"
+          ' gh-oidc-token "${AUDIENCE}"
+
+        echo "${bin}" >> "${GITHUB_PATH}"

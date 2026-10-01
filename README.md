@@ -3,6 +3,7 @@
 ## Authentication
 
 - [`caios-login`][caios-login]
+- [`cwcr-login`][cwcr-login]
 
 ## Build
  - [`buildx-build`][buildx-build]
@@ -17,6 +18,7 @@
  - [`cloudsmith-token`][cloudsmith-token]
 
 [caios-login]: ./auth/caios-login/README.md
+[cwcr-login]: ./auth/cwcr-login/README.md
 [buildx-build]: ./build/buildx-build/README.md
 [kaniko-build]: ./build/kaniko-build/README.md
 [github-token]: ./tools/oidc/github-token/README.md
