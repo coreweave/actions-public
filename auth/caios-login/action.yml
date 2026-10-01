@@ -11,6 +11,10 @@ inputs:
     description: "The AWS CLI profile name to configure. If not set or 'default', uses default profile"
     required: false
     default: ""
+  refresh:
+    description: "When true, configure AWS credential_process so the SDK re-mints CAIOS keys before they expire. Does not export static AWS_ACCESS_KEY_* env vars."
+    required: false
+    default: "false"
 
   # These have defaults
   audience:

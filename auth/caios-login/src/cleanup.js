@@ -7,6 +7,13 @@ import * as exec from "@actions/exec";
 
 async function cleanup() {
   try {
+    // Refresh mode mints keys later via credential_process, so there is no
+    // single access key recorded at the end of this action to revoke.
+    if (core.getBooleanInput("refresh")) {
+      core.info("refresh is set; skipping access-key revoke");
+      return;
+    }
+
     // Get the profile input
     const profile = core.getInput("profile") || "";
 

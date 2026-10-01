@@ -2,6 +2,13 @@
 
 This action allows Github Actions to authenticate to [CAIOS](https://docs.coreweave.com/docs/products/storage/object-storage/about) using OIDC authentication. Using this will set either the `default` AWS profile, or a named `profile` if provided. You can then use this profile to authenticate.
 
+> [!NOTE]
+> By default, credentials are minted **once** and exported as static `AWS_*` env vars.
+> Those keys expire (about 30 minutes). For a long `terraform apply`, set `refresh: true`.
+> That configures an AWS `credential_process` which repeats this action's OIDC exchange —
+> a new GitHub token, then new CAIOS keys — when the SDK needs them. Refresh mode does
+> not export static `AWS_ACCESS_KEY_*` variables, because those override `credential_process`.
+
 ## Example Usage
 
 > [!IMPORTANT]  
@@ -91,6 +98,13 @@ The `Principal` here is `role/<Issuer>:<Subject>`. The `Issuer` is likely `https
      # Required: false
      # Default: ''
      profile: ''
+
+     # Re-mint CAIOS keys via credential_process before they expire.
+     # Leave false for a one-shot login that exports static AWS_* keys.
+     #
+     # Required: false
+     # Default: false
+     refresh: false
    
      # Which Audience to use in the Github ID token to authenticate.
      # This value is set in the CoreWeave Cloud Console IAM settings,
