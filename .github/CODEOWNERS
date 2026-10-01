@@ -3,5 +3,5 @@
 auth/             @coreweave/cloud-platform-api-iam
 auth/caios-login  @coreweave/storage-engineer
 
-cwic/setup-cwic/                   @coreweave/cloud-api-team
-.github/workflows/setup-cwic.yaml  @coreweave/cloud-api-team
+cwic/setup-cwic/                   @coreweave/cloud-platform-api-team
+.github/workflows/setup-cwic.yaml  @coreweave/cloud-platform-api-team
