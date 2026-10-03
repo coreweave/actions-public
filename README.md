@@ -2,7 +2,7 @@
 
 ## Authentication
 
-- [`caios-login`][caios-login]
+- [`caios-login-v2`][caios-login-v2] — Renewable CAIOS authentication using CWIC.
 
 ## Build
  - [`buildx-build`][buildx-build]
@@ -16,7 +16,7 @@
  - [`github-token`][github-token]
  - [`cloudsmith-token`][cloudsmith-token]
 
-[caios-login]: ./auth/caios-login/README.md
+[caios-login-v2]: ./auth/caios-login-v2/README.md
 [buildx-build]: ./build/buildx-build/README.md
 [kaniko-build]: ./build/kaniko-build/README.md
 [github-token]: ./tools/oidc/github-token/README.md
