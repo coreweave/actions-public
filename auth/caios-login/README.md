@@ -1,5 +1,8 @@
 # CAOIS Login
 
+> [!WARNING]
+> **Deprecated:** Use [`caios-login-v2`](../caios-login-v2/README.md) for automatically refreshed OIDC credentials. This action performs a one-time login and does not refresh credentials. See the v2 README for setup requirements and usage.
+
 This action allows Github Actions to authenticate to [CAIOS](https://docs.coreweave.com/docs/products/storage/object-storage/about) using OIDC authentication. Using this will set either the `default` AWS profile, or a named `profile` if provided. You can then use this profile to authenticate.
 
 ## Example Usage

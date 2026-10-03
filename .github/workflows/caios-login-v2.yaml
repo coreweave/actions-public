@@ -1,0 +1,51 @@
+---
+name: CAIOS login v2
+on:
+  pull_request:
+    paths:
+      - auth/caios-login-v2/**
+      - .github/workflows/caios-login-v2.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - auth/caios-login-v2/**
+      - .github/workflows/caios-login-v2.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: auth/caios-login-v2
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: auth/caios-login-v2/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run rollup
+      - name: Check bundled action
+        run: git diff --exit-code -- dist
+      - uses: ./cwic/setup-cwic
+        with:
+          version: v1.46.0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: auth/caios-login-v2/tests/go-credentials/go.mod
+          cache-dependency-path: auth/caios-login-v2/tests/go-credentials/go.sum
+      - name: Verify credential renewal using local test endpoints
+        run: npm run integration
