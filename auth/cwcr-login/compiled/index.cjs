@@ -32327,10 +32327,13 @@ async function checkCwic(tools) {
     );
 }
 
-async function installHelper(runner, tempDir) {
+async function helperDir(tempDir) {
   if (!tempDir)
     throw new Error("RUNNER_TEMP must be set to a runner-writable directory.");
-  const bin = await promises.mkdtemp(path$1.join(tempDir, "cwcr-login-"));
+  return promises.mkdtemp(path$1.join(tempDir, "cwcr-login-"));
+}
+
+async function installHelper(runner, bin) {
   await runner.exec("cwic", [
     "registry",
     "credential-helper",
@@ -32338,7 +32341,6 @@ async function installHelper(runner, tempDir) {
     "--bin-dir",
     bin,
   ]);
-  return bin;
 }
 
 async function configureRegistry(runner, registry, audience) {
@@ -32366,8 +32368,9 @@ async function run({
     const audience = toolkit.getInput("audience", { required: true });
     checkOIDCAccess(env);
     await checkCwic(ioTools);
-    const bin = await installHelper(runner, env.RUNNER_TEMP);
+    const bin = await helperDir(env.RUNNER_TEMP);
     toolkit.addPath(bin);
+    await installHelper(runner, bin);
     await configureRegistry(runner, registry, audience);
     // Tell the post step which registry to unconfigure.
     toolkit.saveState("registry", registry);
