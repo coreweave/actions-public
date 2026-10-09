@@ -2,7 +2,7 @@
 
 Authenticate GitHub Actions to CoreWeave Container Registry (CWCR) using the workflow's OIDC identity.
 
-After this action runs, `docker`, `buildx`, `crane`, `oras`, and other Docker-compatible tools can push to and pull from the registry for the rest of the job.
+After this action runs, Docker-compatible tools in the same job authenticate to the registry automatically. What they can do there is governed by the access granted to the workflow's identity in the registry's access configuration.
 
 ## Example Usage
 
@@ -19,7 +19,10 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up CWIC
+        uses: coreweave/actions-public/cwic/setup-cwic@6b225e30df11c646ddee8641565935318f0918f0 # v1.2.0
 
       - name: Log in to CWCR
         uses: coreweave/actions-public/auth/cwcr-login@main
@@ -27,14 +30,16 @@ jobs:
           registry: acme.cwcr.io
           audience: cwcr-acme
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           push: true
           tags: acme.cwcr.io/team/app:${{ github.sha }}
 ```
+
+For reproducible workflows, replace `@main` with a published [actions-public release tag](https://github.com/coreweave/actions-public/releases) containing this action or a full commit SHA.
 
 ## Prerequisites
 
@@ -76,16 +81,32 @@ For the claims available on a GitHub OIDC token, see [the GitHub documentation o
 
 ## Inputs
 
-| Input          | Required | Default  | Description                                                                                              |
-|----------------|----------|----------|----------------------------------------------------------------------------------------------------------|
-| `registry`     | yes      |          | CWCR registry host, e.g. `acme.cwcr.io`                                                                  |
-| `audience`     | yes      |          | Audience requested in the GitHub OIDC token; must match the Workload Federation config, e.g. `cwcr-acme` |
-| `cwic-version` | no       | `latest` | [cwic](https://github.com/coreweave/cwic/releases) release tag to install                                |
+| Input      | Required | Default | Description                                                                                              |
+| ---------- | -------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| `registry` | yes      |         | CWCR registry host, e.g. `acme.cwcr.io`                                                                  |
+| `audience` | yes      |         | Audience requested in the GitHub OIDC token; must match the Workload Federation config, e.g. `cwcr-acme` |
 
-## Requirements
+## Supported runners
 
-Runs on Linux and macOS runners (x64 and arm64) with `bash`, `curl`, and `jq` available, which includes all GitHub-hosted runners.
+| Operating system | Architectures                   |
+| ---------------- | ------------------------------- |
+| Linux            | x86_64 (`x64`), ARM64 (`arm64`) |
+| macOS            | x86_64 (`x64`), ARM64 (`arm64`) |
 
-## Persistent runners
+Runners need a GitHub Actions runner supporting Node.js 24, a writable `RUNNER_TEMP`, and `cwic` on PATH. Run [`setup-cwic`](../../cwic/setup-cwic/README.md) first; this action does not install CWIC.
 
-On a persistent runner, use a dedicated job account or run cwic registry credential-helper unconfigure acme.cwcr.io after use with the same DOCKER_CONFIG setting to remove the binding and its CWIC Docker helper entry; the saved command requires an active GitHub job environment.
+Each invocation installs the Docker credential helper into a new directory under `RUNNER_TEMP` and binds the registry to it in the Docker configuration. When the job ends, the action's post step removes the binding again, so nothing is left behind on persistent runners.
+
+## Development
+
+From this directory, using Node.js 24:
+
+```sh
+npm ci
+npm test
+npm run format:check
+npm run package
+npm run integration
+```
+
+Commit `compiled/` together with source changes. Unit tests use Node's test runner with mocked toolkit boundaries and real temporary files. Integration tests run the committed `compiled/token.cjs` against the job's GitHub OIDC endpoint, check the returned token's audience, and check that repeated runs return distinct tokens; they need `id-token: write` and are skipped outside GitHub Actions. CI checks formatting and bundle reproducibility and exercises all four supported OS/architecture combinations.

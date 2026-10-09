@@ -1,0 +1,84 @@
+---
+name: Log into CWCR
+on:
+  pull_request:
+    paths:
+      - auth/cwcr-login/**
+      - .github/workflows/cwcr-login.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - auth/cwcr-login/**
+      - .github/workflows/cwcr-login.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+    working-directory: auth/cwcr-login
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: auth/cwcr-login/package-lock.json
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run package
+      - name: Check committed bundles
+        run: git diff --exit-code -- compiled/
+
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Reject a job without cwic
+        id: no-cwic
+        continue-on-error: true
+        uses: ./auth/cwcr-login
+        with:
+          registry: acme.cwcr.io
+          audience: cwcr-login-ci
+      - name: Verify the missing cwic failure
+        run: test '${{ steps.no-cwic.outcome }}' = failure
+      - uses: ./cwic/setup-cwic
+      - name: Log in
+        uses: ./auth/cwcr-login
+        with:
+          registry: acme.cwcr.io
+          audience: cwcr-login-ci
+      - name: Verify the helper is on PATH and bound to the registry
+        run: |
+          command -v docker-credential-cwic
+          docker-credential-cwic list | grep -F '"acme.cwcr.io":"oidc"'
+      - name: Verify the token script
+        run: npm run integration
+      - name: Log in to a second registry in the same job
+        uses: ./auth/cwcr-login
+        with:
+          registry: second.cwcr.io
+          audience: cwcr-login-ci
+      - name: Verify both registries are bound
+        run: |
+          docker-credential-cwic list | grep -F '"acme.cwcr.io":"oidc"'
+          docker-credential-cwic list | grep -F '"second.cwcr.io":"oidc"'
