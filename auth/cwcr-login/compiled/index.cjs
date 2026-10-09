@@ -32334,13 +32334,12 @@ async function helperDir(tempDir) {
 }
 
 async function installHelper(runner, bin) {
-  await runner.exec("cwic", [
-    "registry",
-    "credential-helper",
-    "install",
-    "--bin-dir",
-    bin,
-  ]);
+  // Install prints shell-profile guidance that does not apply to a job.
+  await runner.exec(
+    "cwic",
+    ["registry", "credential-helper", "install", "--bin-dir", bin],
+    { silent: true },
+  );
 }
 
 async function configureRegistry(runner, registry, audience) {
