@@ -1,0 +1,16 @@
+name: Log into CWCR
+description: Authenticate to CoreWeave Container Registry (CWCR) using GitHub Actions OIDC
+author: CoreWeave
+
+inputs:
+  registry:
+    description: "The CWCR registry host, e.g. acme.cwcr.io"
+    required: true
+  audience:
+    description: "The Audience claim to request in the GitHub OIDC token. Must match the audience registered for GitHub's issuer in CoreWeave Workload Federation, e.g. cwcr-acme"
+    required: true
+
+runs:
+  using: node24
+  main: compiled/index.cjs
+  post: compiled/cleanup.cjs

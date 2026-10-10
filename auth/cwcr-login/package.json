@@ -1,0 +1,31 @@
+{
+  "name": "cwcr-login-action",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authenticate to CoreWeave Container Registry (CWCR) from GitHub Actions",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test tests/cwcr-login.test.js tests/token.test.js tests/cleanup.test.js",
+    "integration": "node --test tests/integration.test.js",
+    "package": "rollup --config",
+    "format:write": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@actions/core": "^3.0.1",
+    "@actions/exec": "^2.0.0",
+    "@actions/http-client": "^4.0.1",
+    "@actions/io": "^2.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "prettier": "^3.9.9",
+    "rollup": "^4.53.2"
+  }
+}

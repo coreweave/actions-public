@@ -2,6 +2,8 @@
 
 auth/             @coreweave/cloud-platform-api-iam
 auth/caios-login  @coreweave/storage-engineer
+auth/cwcr-login   @coreweave/applied-compute
+.github/workflows/cwcr-login.yaml  @coreweave/applied-compute
 
 cwic/setup-cwic/                   @coreweave/cloud-platform-api-team
 .github/workflows/setup-cwic.yaml  @coreweave/cloud-platform-api-team
