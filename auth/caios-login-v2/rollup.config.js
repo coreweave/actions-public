@@ -2,7 +2,7 @@ import commonjs from "@rollup/plugin-commonjs";
 import json from "@rollup/plugin-json";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 
-export default ["index", "cleanup"].map((entry) => ({
+export default ["index", "cleanup", "credential-process"].map((entry) => ({
   input: `src/${entry}.js`,
   output: {
     esModule: true,

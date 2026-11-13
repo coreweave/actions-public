@@ -132,7 +132,7 @@ test("default login uses a private renewable process and removes overriding envi
   assert.match(config, /s3 =\n    addressing_style = virtual/);
   assert.match(
     config,
-    /credential_process = \/usr\/bin\/env "\/tools with spaces\/cwic" "auth" "accesskey" "oidc"/,
+    /credential_process = \/usr\/bin\/env "[^"]+" "[^"]*credential-process\.js" "\/tools with spaces\/cwic" "auth" "accesskey" "oidc"/,
   );
   assert.match(config, /"--storage=disk"/);
   assert.match(config, /"--api-url" "https:\/\/api\.coreweave\.com"/);

@@ -244,7 +244,7 @@ test(
 );
 
 test(
-  "bundled action refreshes CWIC credentials through the AWS CLI and Go SDK",
+  "bundled action refreshes credentials and sanitizes failed renewals through the AWS CLI and Go SDK",
   {
     skip: enabled
       ? false
@@ -281,6 +281,12 @@ test(
           const orgId = "cw-integration";
           const tokenRequests = [];
           const exchanges = [];
+          let rejectRenewal = false;
+          const rejectedCredentials = {
+            AccessKeyId: "integration-rejected-key",
+            SecretAccessKey: "integration-rejected-secret",
+            SessionToken: "integration-rejected-session",
+          };
           let s3Requests = 0;
           const unexpectedRequests = [];
           const keys = ["integration-first-key", "integration-renewed-key"];
@@ -315,6 +321,15 @@ test(
             ) {
               const generation = exchanges.length;
               exchanges.push(request.headers.authorization);
+              if (rejectRenewal) {
+                response.writeHead(403).end(
+                  JSON.stringify({
+                    error: `Renewal denied: ${request.headers.authorization}; ${requestBearers[1]}`,
+                    ...rejectedCredentials,
+                  }),
+                );
+                return;
+              }
               response.end(
                 JSON.stringify({
                   AccessKeyId: keys[generation],
@@ -633,6 +648,45 @@ aws_secret_access_key = unrelated-secret
               exchanges[generation] === fakeJWT(generation),
               "CWIC exchanges the current raw JWT",
             );
+          }
+          assert.equal(unexpectedRequests.length, 0);
+
+          rejectRenewal = true;
+          for (const client of clients) {
+            // Reapply the expired cache fixture before each failed renewal.
+            await writeFile(entries[0].file, JSON.stringify(entries[0].value));
+            const previousExchanges = exchanges.length;
+            const failure = await execute(client.program, client.args, {
+              env: useEnv,
+              cwd: laterCwd,
+              encoding: "utf8",
+              timeout: 10_000,
+            }).then(
+              () => null,
+              (error) => error,
+            );
+            assert.ok(
+              failure && typeof failure.code === "number" && failure.code !== 0,
+              `${client.name} reports a failed renewal`,
+            );
+            assert.ok(
+              exchanges.length > previousExchanges,
+              `${client.name} attempts a fresh credential exchange`,
+            );
+            assert.equal(failure.stdout, "");
+            const output = failure.stderr;
+            assert.ok(output.includes("Renewal denied"));
+            assert.ok(output.includes("[REDACTED]"));
+            for (const secret of [
+              requestBearers[1],
+              ...Object.values(rejectedCredentials),
+              ...tokenRequests.map((_, generation) => fakeJWT(generation)),
+            ]) {
+              assert.ok(
+                !output.includes(secret),
+                `${client.name} must not expose renewal secrets`,
+              );
+            }
           }
           assert.equal(unexpectedRequests.length, 0);
 

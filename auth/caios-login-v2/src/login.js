@@ -4,16 +4,11 @@ import * as io from "@actions/io";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
-import { stripVTControlCharacters } from "node:util";
+import { fileURLToPath } from "node:url";
 import { configureProfile, withoutProfile } from "./profiles.js";
+import { failureDetails, staticCredentials } from "./diagnostics.js";
 
 const oidcPath = "/v1/cwobject/temporary-credentials/oidc";
-const staticCredentials = [
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_SESSION_TOKEN",
-  "AWS_SECURITY_TOKEN",
-];
 const webIdentityCredentials = [
   "AWS_ROLE_ARN",
   "AWS_WEB_IDENTITY_TOKEN_FILE",
@@ -79,31 +74,6 @@ async function readOptional(file) {
     if (error.code === "ENOENT") return "";
     throw error;
   }
-}
-
-function failureDetails(stderr, env) {
-  let details = stripVTControlCharacters(stderr || "");
-  for (const name of [
-    "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
-    "COREWEAVE_API_TOKEN",
-    ...staticCredentials,
-  ]) {
-    if (env[name]) details = details.replaceAll(env[name], "[REDACTED]");
-  }
-  // CWIC forwards API error bodies, which may echo a JWT or credential fields.
-  details = details
-    .replace(
-      /\beyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g,
-      "[REDACTED]",
-    )
-    .replace(/\bBearer\s+[A-Za-z0-9._~+\/-]+=*/gi, "Bearer [REDACTED]")
-    .replace(
-      /((?:["']?)(?:AccessKeyId|SecretAccessKey|SessionToken|Token|access_token|id_token|Authorization)(?:["']?)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:Bearer\s+)?[^\s,;}\]]+)/gi,
-      "$1[REDACTED]",
-    );
-  return (
-    details.trim().slice(0, 4096) || "CWIC did not write diagnostics to stderr."
-  );
 }
 
 async function validatePrerequisites({ toolkit, which, env, home }) {
@@ -188,7 +158,15 @@ export async function run({
     ];
     // An unquoted executable prevents the Go SDK's INI parser from stripping
     // the first and last argument quotes and corrupting the command.
-    const command = `/usr/bin/env ${credentialCommand([cwic, ...args])}`;
+    const wrapper = fileURLToPath(
+      new URL("./credential-process.js", import.meta.url),
+    );
+    const command = `/usr/bin/env ${credentialCommand([
+      process.execPath,
+      wrapper,
+      cwic,
+      ...args,
+    ])}`;
 
     // Authenticate now to fail this step on a bad trust policy. Keep stdout out
     // of the job log; subsequent AWS calls use the same renewable CWIC cache.
