@@ -123,7 +123,7 @@ runs:
       run: cp "$GITHUB_ACTION_PATH"/kaniko-entrypoint.sh _tmp/kaniko/kaniko-entrypoint.sh
 
     - name: Run Kaniko to build and push image
-      uses: docker://gcr.io/kaniko-project/executor:v1.23.2-debug
+      uses: docker://gcr.io/kaniko-project/executor:v1.23.2-debug@sha256:c3109d5926a997b100c4343944e06c6b30a6804b2f9abe0994d3de6ef92b028e
       env:
         CONTEXT: ${{ inputs.context }}
         DOCKERFILE: ${{ inputs.dockerfile }}
