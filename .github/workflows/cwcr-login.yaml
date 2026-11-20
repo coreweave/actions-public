@@ -42,6 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # macos-15-intel, macos-15: re-add when static-IP macOS runners exist
         runner: [cw-static-pub-x64-4c, cw-static-pub-arm-4c]
     runs-on: ${{ matrix.runner }}
     permissions:
