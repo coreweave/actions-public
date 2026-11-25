@@ -1,0 +1,185 @@
+---
+name: Publish Artifacts
+on:
+  pull_request:
+    paths:
+      - publish/publish-artifacts/**
+      - .github/workflows/publish-artifacts.yaml
+  push:
+    branches:
+      - main
+    paths:
+      - publish/publish-artifacts/**
+      - .github/workflows/publish-artifacts.yaml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # Exercises input validation and planning. Needs no JFrog OIDC provider, so
+  # the job deliberately has no id-token permission.
+  validate:
+    runs-on: cw-static-pub-x64-4c
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create fixtures
+        run: |
+          mkdir -p dist/charts
+          touch dist/cw-example_1.2.3_amd64.deb dist/cw-example_1.2.3_arm64.deb
+          touch dist/cw-example_1.2.3.tar.gz dist/checksums.txt dist/noarch.deb
+          touch dist/charts/example-0.1.0.tgz
+
+      - name: Plan a multi-arch Debian release
+        id: debian
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: debian
+          repository: cw-example-debian-prod-local
+          files: dist/*_*_*.deb
+          deb-distribution: stable
+          dry-run: 'true'
+      - name: Verify the Debian plan
+        env:
+          COUNT: ${{ steps.debian.outputs.count }}
+          FILES: ${{ steps.debian.outputs.files }}
+        run: |
+          test "${COUNT}" = 2
+          grep -Fxq dist/cw-example_1.2.3_amd64.deb <<< "${FILES}"
+          grep -Fxq dist/cw-example_1.2.3_arm64.deb <<< "${FILES}"
+
+      - name: Plan a generic upload with several patterns
+        id: generic
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: generic
+          repository: cw-example-generic-prod-local
+          target-path: releases/1.2.3
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/checksums.txt
+          properties: release=1.2.3;source=ci
+          dry-run: 'true'
+      - name: Verify the generic plan de-duplicates files
+        run: test '${{ steps.generic.outputs.count }}' = 2
+
+      - name: Plan a Helm upload with a recursive glob
+        id: helm
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: helm
+          repository: cw-example-helm-prod-local
+          files: dist/**/*.tgz
+          dry-run: 'true'
+      - name: Verify the Helm plan
+        run: test '${{ steps.helm.outputs.count }}' = 1
+
+      - name: Reject an unknown package type
+        id: bad-type
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: rpm
+          repository: cw-example-generic-prod-local
+          files: dist/checksums.txt
+          dry-run: 'true'
+      - name: Reject container images
+        id: oci
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: oci
+          repository: cw-example-oci-prod-local
+          files: dist/checksums.txt
+          dry-run: 'true'
+      - name: Reject Debian without a distribution
+        id: no-distribution
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: debian
+          repository: cw-example-debian-prod-local
+          files: dist/cw-example_1.2.3_amd64.deb
+          dry-run: 'true'
+      - name: Reject a Debian file without an architecture in its name
+        id: no-arch
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: debian
+          repository: cw-example-debian-prod-local
+          files: dist/noarch.deb
+          deb-distribution: stable
+          dry-run: 'true'
+      - name: Reject a non-Debian file for package-type debian
+        id: not-deb
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: debian
+          repository: cw-example-debian-prod-local
+          files: dist/checksums.txt
+          deb-distribution: stable
+          dry-run: 'true'
+      - name: Reject a pattern that matches nothing
+        id: no-match
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: generic
+          repository: cw-example-generic-prod-local
+          files: dist/does-not-exist-*.zip
+          dry-run: 'true'
+      - name: Reject a target path that escapes the repository
+        id: traversal
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: generic
+          repository: cw-example-generic-prod-local
+          target-path: releases/../../other-repo
+          files: dist/checksums.txt
+          dry-run: 'true'
+      - name: Reject malformed properties
+        id: bad-props
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: generic
+          repository: cw-example-generic-prod-local
+          files: dist/checksums.txt
+          properties: not-a-property
+          dry-run: 'true'
+      - name: Reject a real upload from a job without id-token permission
+        id: no-id-token
+        continue-on-error: true
+        uses: ./publish/publish-artifacts
+        with:
+          package-type: generic
+          repository: cw-example-generic-prod-local
+          files: dist/checksums.txt
+          oidc-provider-name: example-provider
+          oidc-audience: example-audience
+      - name: Verify every rejection failed
+        run: |
+          set -euo pipefail
+          for outcome in \
+            '${{ steps.bad-type.outcome }}' \
+            '${{ steps.oci.outcome }}' \
+            '${{ steps.no-distribution.outcome }}' \
+            '${{ steps.no-arch.outcome }}' \
+            '${{ steps.not-deb.outcome }}' \
+            '${{ steps.no-match.outcome }}' \
+            '${{ steps.traversal.outcome }}' \
+            '${{ steps.bad-props.outcome }}' \
+            '${{ steps.no-id-token.outcome }}'; do
+            test "${outcome}" = failure
+          done
