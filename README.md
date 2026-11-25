@@ -9,6 +9,10 @@
  - [`buildx-build`][buildx-build]
  - [`kaniko-build`][kaniko-build]
 
+## Publish
+
+- [`publish-artifacts`][publish-artifacts]
+
 ## Tools
 
 - [`setup-cwic`][setup-cwic]
@@ -24,3 +28,4 @@
 [github-token]: ./tools/oidc/github-token/README.md
 [cloudsmith-token]: ./tools/oidc/cloudsmith-token/README.md
 [setup-cwic]: ./cwic/setup-cwic/README.md
+[publish-artifacts]: ./publish/publish-artifacts/README.md

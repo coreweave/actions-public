@@ -1,0 +1,129 @@
+---
+name: Publish Artifacts
+description: >-
+  Upload release files (Debian packages, generic files, Helm charts, npm and
+  PyPI packages) to a CoreWeave Artifactory repository. Authenticates with the
+  job's GitHub OIDC token, so no secret is stored in the repository.
+author: CoreWeave
+branding:
+  icon: upload-cloud
+  color: blue
+
+inputs:
+  package-type:
+    description: 'Type of the target repository: debian, generic, helm, npm or pypi.'
+    required: true
+  repository:
+    description: 'Artifactory repository key to upload to (e.g. cw-example-debian-prod-local).'
+    required: true
+  files:
+    description: >-
+      Newline-separated list of files or glob patterns, relative to the
+      workspace (e.g. dist/*.deb). Every pattern must match at least one file.
+    required: true
+  target-path:
+    description: >-
+      Directory inside the repository to upload to. Defaults to pool/<deb-component>
+      for debian and to the repository root for every other type.
+    required: false
+    default: ''
+  deb-distribution:
+    description: 'Debian distribution to index the packages under (e.g. stable). Required for debian.'
+    required: false
+    default: ''
+  deb-component:
+    description: 'Debian component to index the packages under.'
+    required: false
+    default: 'main'
+  deb-architecture:
+    description: >-
+      Debian architecture for every file. Leave empty to read it from each file
+      name (<name>_<version>_<arch>.deb), which handles multi-arch releases.
+    required: false
+    default: ''
+  properties:
+    description: 'Extra Artifactory properties for every file, as key1=value1;key2=value2.'
+    required: false
+    default: ''
+  jfrog-url:
+    description: 'JFrog platform URL used for the OIDC token exchange.'
+    required: false
+    default: 'https://coreweave.jfrog.io'
+  oidc-provider-name:
+    description: 'Name of the JFrog OIDC provider that trusts this repository. Required unless dry-run is true.'
+    required: false
+    default: ''
+  oidc-audience:
+    description: 'Audience the JFrog OIDC provider expects. Required unless dry-run is true.'
+    required: false
+    default: ''
+  dry-run:
+    description: 'Validate the inputs and print the upload plan without authenticating or uploading.'
+    required: false
+    default: 'false'
+
+outputs:
+  count:
+    description: 'Number of files uploaded, or planned in a dry run.'
+    value: ${{ steps.plan.outputs.count }}
+  files:
+    description: 'Newline-separated list of the files uploaded, or planned in a dry run.'
+    value: ${{ steps.plan.outputs.files }}
+
+runs:
+  using: composite
+  steps:
+    - name: Plan upload
+      id: plan
+      shell: bash
+      env:
+        PACKAGE_TYPE: ${{ inputs.package-type }}
+        REPOSITORY: ${{ inputs.repository }}
+        FILES: ${{ inputs.files }}
+        TARGET_PATH: ${{ inputs.target-path }}
+        DEB_DISTRIBUTION: ${{ inputs.deb-distribution }}
+        DEB_COMPONENT: ${{ inputs.deb-component }}
+        DEB_ARCHITECTURE: ${{ inputs.deb-architecture }}
+        PROPERTIES: ${{ inputs.properties }}
+        OIDC_PROVIDER_NAME: ${{ inputs.oidc-provider-name }}
+        OIDC_AUDIENCE: ${{ inputs.oidc-audience }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: '"${GITHUB_ACTION_PATH}/publish.sh" plan'
+
+    - name: Setup JFrog CLI (Artifactory OIDC)
+      id: setup-jfrog-cli
+      if: inputs.dry-run != 'true'
+      uses: jfrog/setup-jfrog-cli@deda456d982fc5e9a7a020b63eb0d2968aedd33e # v5.1.0
+      env:
+        JF_URL: ${{ inputs.jfrog-url }}
+      with:
+        oidc-provider-name: ${{ inputs.oidc-provider-name }}
+        oidc-audience: ${{ inputs.oidc-audience }}
+
+    - name: Check Artifactory credentials
+      if: inputs.dry-run != 'true'
+      shell: bash
+      env:
+        ARTIFACTORY_USER: ${{ steps.setup-jfrog-cli.outputs.oidc-user }}
+        ARTIFACTORY_TOKEN: ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+      run: |
+        set -euo pipefail
+        if [[ -z "${ARTIFACTORY_USER}" || -z "${ARTIFACTORY_TOKEN}" ]]; then
+          echo "::error::The Artifactory OIDC exchange returned no credentials. Check oidc-provider-name, oidc-audience and that the provider trusts this repository, ref and environment."
+          exit 1
+        fi
+        echo "::add-mask::${ARTIFACTORY_TOKEN}"
+        echo "Authenticated to Artifactory as ${ARTIFACTORY_USER}"
+
+    - name: Upload
+      if: inputs.dry-run != 'true'
+      shell: bash
+      env:
+        PLAN_FILE: ${{ steps.plan.outputs.plan-file }}
+        PACKAGE_TYPE: ${{ inputs.package-type }}
+        REPOSITORY: ${{ inputs.repository }}
+        TARGET_PATH: ${{ inputs.target-path }}
+        DEB_DISTRIBUTION: ${{ inputs.deb-distribution }}
+        DEB_COMPONENT: ${{ inputs.deb-component }}
+        PROPERTIES: ${{ inputs.properties }}
+      run: '"${GITHUB_ACTION_PATH}/publish.sh" upload'

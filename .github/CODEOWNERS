@@ -7,3 +7,6 @@ auth/cwcr-login   @coreweave/applied-compute
 
 cwic/setup-cwic/                   @coreweave/cloud-platform-api-team
 .github/workflows/setup-cwic.yaml  @coreweave/cloud-platform-api-team
+
+publish/                                  @coreweave/developer-experience
+.github/workflows/publish-artifacts.yaml  @coreweave/developer-experience
